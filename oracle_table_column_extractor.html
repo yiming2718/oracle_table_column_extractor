@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oracle CREATE TABLE 欄位提取器</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f5f8;
+    --panel: #ffffff;
+    --text: #182230;
+    --muted: #667085;
+    --border: #d8dee8;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --soft: #eff6ff;
+    --success: #15803d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Google Sans Flex", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+    min-height: 100vh;
+  }
+  .app { max-width: 1660px; margin: 0 auto; padding: 30px 34px 24px; }
+  header { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:22px; }
+  h1 { font-size:26px; letter-spacing:-.5px; margin:0 0 7px; font-weight:650; }
+  .subtitle { margin:0; color:var(--muted); font-size:14px; }
+  .tag { color:#475467; background:#e9edf3; padding:7px 11px; border-radius:7px; font-size:12px; white-space:nowrap; }
+  .workspace { display:grid; grid-template-columns: 1.12fr .88fr; gap:20px; align-items:stretch; }
+  .panel {
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    box-shadow:0 2px 8px rgba(16,24,40,.035); overflow:hidden; min-width:0;
+  }
+  .panel-head { padding:17px 20px 14px; border-bottom:1px solid #edf0f4; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .panel-title { font-size:15px; font-weight:650; }
+  .panel-hint { color:var(--muted); font-size:12px; margin-top:4px; }
+  .counter { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+  textarea {
+    display:block; width:100%; resize:vertical; border:0; outline:none; padding:18px 20px;
+    background:#fff; color:#243041; font:13px/1.65 Consolas, "Cascadia Code", "Microsoft JhengHei", monospace;
+    tab-size:2;
+  }
+  #source { height:610px; min-height:350px; }
+  #result { height:610px; min-height:220px; background:#fbfcfe; }
+  .panel-actions { display:flex; flex-wrap:wrap; gap:9px; padding:13px 18px; border-top:1px solid #edf0f4; }
+  button {
+    border:1px solid var(--border); background:#fff; color:#344054; border-radius:7px;
+    padding:9px 14px; font:600 13px inherit; cursor:pointer; transition:.15s ease;
+  }
+  button:hover { background:#f8fafc; border-color:#aeb8c7; }
+  button.primary { background:var(--accent); color:white; border-color:var(--accent); }
+  button.primary:hover { background:var(--accent-hover); }
+  button:focus-visible { outline:3px solid #bfdbfe; outline-offset:2px; }
+  .status { min-height:24px; padding:0 20px 13px; color:var(--muted); font-size:12px; }
+  .status.ok { color:var(--success); }
+  .options { display:flex; align-items:center; gap:14px; padding:12px 20px; border-top:1px solid #edf0f4; color:#475467; font-size:12px; }
+  .options label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  input[type=checkbox] { accent-color:var(--accent); }
+  footer { margin-top:17px; color:#98a2b3; font-size:11px; text-align:right; }
+  @media (max-width: 1050px) {
+    .app { padding:22px 18px; }
+    .workspace { grid-template-columns:1fr; }
+    #source { height:420px; }
+    #result { height:180px; }
+    header { align-items:flex-start; flex-direction:column; }
+  }
+  @media (max-width: 600px) {
+    .app { padding:16px 12px; }
+    h1 { font-size:21px; }
+    .panel-head { padding:14px; }
+    textarea { padding:14px; font-size:12px; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <div>
+      <h1>Oracle CREATE TABLE 欄位提取器</h1>
+      <p class="subtitle">貼上建表 SQL，自動擷取欄位名稱並整理成逗號分隔清單。</p>
+    </div>
+    <div class="tag">Oracle SQL · Offline Tool</div>
+  </header>
+
+  <section class="workspace">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">輸入 SQL</div>
+          <div class="panel-hint">支援欄位型別、行尾註解、區塊註解與 Constraint</div>
+        </div>
+        <span class="counter" id="inputCount">0 字元</span>
+      </div>
+      <textarea id="source" spellcheck="false" placeholder="請將 CREATE TABLE SQL 貼在這裡..."></textarea>
+      <div class="panel-actions">
+        <button class="primary" id="extractBtn">提取欄位</button>
+        <button id="sampleBtn">載入範例</button>
+        <button id="clearBtn">清空</button>
+      </div>
+      <div class="status" id="inputStatus" aria-live="polite">尚未執行提取。</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">輸出欄位名稱</div>
+          <div class="panel-hint">可直接複製，貼到 PL/SQL、SELECT 或其他文件</div>
+        </div>
+        <span class="counter" id="fieldCount">0 個欄位</span>
+      </div>
+      <textarea id="result" spellcheck="false" readonly placeholder="提取結果會顯示在這裡..."></textarea>
+      <div class="options">
+        <label><input type="checkbox" id="uppercase"> 全部轉大寫</label>
+        <label><input type="checkbox" id="newline"> 每個欄位換行</label>
+      </div>
+      <div class="panel-actions">
+        <button class="primary" id="copyBtn">複製結果</button>
+        <button id="selectBtn">全選結果</button>
+      </div>
+      <div class="status" id="outputStatus" aria-live="polite">等待提取結果。</div>
+    </div>
+  </section>
+  <footer>所有處理都在本機瀏覽器完成，不會上傳 SQL 內容。</footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let extractedNames = [];
+
+const sampleSQL = `CREATE TABLE EMP
+       (EMPNO NUMBER(4) NOT NULL,
+        ENAME VARCHAR2(10),
+        JOB VARCHAR2(9),
+        MGR NUMBER(4),
+        HIREDATE DATE,
+        SAL NUMBER(7,2),
+        COMM NUMBER(7,2),
+        DEPTNO NUMBER(2),
+        CONSTRAINT PK_EMP PRIMARY KEY (EMPNO),  
+        CONSTRAINT FK_DEPTNO FOREIGN KEY (DEPTNO) REFERENCES DEPT (DEPTNO)          
+        );`;
+
+function stripComments(sql) {
+  let out = '', i = 0, quote = false;
+  while (i < sql.length) {
+    const ch = sql[i], next = sql[i + 1];
+    if (quote) {
+      out += ch;
+      if (ch === "'" && next === "'") { out += next; i += 2; continue; }
+      if (ch === "'") quote = false;
+      i++; continue;
+    }
+    if (ch === "'") { quote = true; out += ch; i++; continue; }
+    if (ch === '-' && next === '-') {
+      while (i < sql.length && sql[i] !== '\n') i++;
+      out += '\n'; continue;
+    }
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < sql.length && !(sql[i] === '*' && sql[i + 1] === '/')) i++;
+      i += 2; out += ' '; continue;
+    }
+    out += ch; i++;
+  }
+  return out;
+}
+
+function splitTopLevel(text) {
+  const parts = [];
+  let start = 0, depth = 0, quote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], next = text[i + 1];
+    if (quote) {
+      if (ch === "'" && next === "'") { i++; continue; }
+      if (ch === "'") quote = false;
+      continue;
+    }
+    if (ch === "'") { quote = true; continue; }
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0) {
+      parts.push(text.slice(start, i)); start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+function extractColumns(sql) {
+  const clean = stripComments(sql);
+  const createMatch = clean.match(/\bCREATE\s+(?:GLOBAL\s+TEMPORARY\s+)?TABLE\s+(?:"[^"]+"|[\w$#.&]+)\s*\(/i);
+  if (!createMatch) throw new Error('找不到 CREATE TABLE ... ( 定義，請確認貼上的 SQL。');
+
+  const openIndex = clean.indexOf('(', createMatch.index);
+  let depth = 0, closeIndex = -1, quote = false;
+  for (let i = openIndex; i < clean.length; i++) {
+    const ch = clean[i], next = clean[i + 1];
+    if (quote) {
+      if (ch === "'" && next === "'") { i++; continue; }
+      if (ch === "'") quote = false;
+      continue;
+    }
+    if (ch === "'") { quote = true; continue; }
+    if (ch === '(') depth++;
+    if (ch === ')' && --depth === 0) { closeIndex = i; break; }
+  }
+  if (closeIndex < 0) throw new Error('CREATE TABLE 欄位定義的括號不完整。');
+
+  const body = clean.slice(openIndex + 1, closeIndex);
+  const names = [];
+  for (const part of splitTopLevel(body)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    if (/^(CONSTRAINT|PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK)\b/i.test(trimmed)) continue;
+    const match = trimmed.match(/^("[^"]+"|[A-Za-z][\w$#]*)\s+/);
+    if (match) names.push(match[1].replace(/^"|"$/g, ''));
+  }
+  if (!names.length) throw new Error('沒有辨識到欄位，請確認 CREATE TABLE 定義格式。');
+  return names;
+}
+
+function renderOutput() {
+  const names = extractedNames.map(n => $('uppercase').checked ? n.toUpperCase() : n);
+  $('result').value = names.join($('newline').checked ? ',\n' : ',');
+  $('fieldCount').textContent = `${names.length} 個欄位`;
+}
+function runExtract() {
+  try {
+    extractedNames = extractColumns($('source').value);
+    renderOutput();
+    $('inputStatus').textContent = '提取完成。';
+    $('inputStatus').className = 'status ok';
+    $('outputStatus').textContent = `成功擷取 ${extractedNames.length} 個欄位。`;
+    $('outputStatus').className = 'status ok';
+  } catch (err) {
+    extractedNames = [];
+    $('result').value = '';
+    $('fieldCount').textContent = '0 個欄位';
+    $('inputStatus').textContent = err.message;
+    $('inputStatus').className = 'status';
+    $('outputStatus').textContent = '請修正輸入內容後重新提取。';
+    $('outputStatus').className = 'status';
+  }
+}
+$('extractBtn').addEventListener('click', runExtract);
+$('sampleBtn').addEventListener('click', () => {
+  $('source').value = sampleSQL;
+  $('inputCount').textContent = `${sampleSQL.length} 字元`;
+  runExtract();
+});
+$('clearBtn').addEventListener('click', () => {
+  $('source').value = ''; $('result').value = ''; extractedNames = [];
+  $('inputCount').textContent = '0 字元'; $('fieldCount').textContent = '0 個欄位';
+  $('inputStatus').textContent = '已清空。'; $('inputStatus').className = 'status';
+  $('outputStatus').textContent = '等待提取結果。'; $('outputStatus').className = 'status';
+});
+$('copyBtn').addEventListener('click', async () => {
+  if (!$('result').value) { $('outputStatus').textContent = '目前沒有可複製的結果。'; return; }
+  try {
+    await navigator.clipboard.writeText($('result').value);
+    $('outputStatus').textContent = '已複製到剪貼簿。';
+    $('outputStatus').className = 'status ok';
+  } catch {
+    $('result').focus(); $('result').select();
+    $('outputStatus').textContent = '瀏覽器未授權自動複製，已選取結果，請按 Ctrl+C。';
+  }
+});
+$('selectBtn').addEventListener('click', () => { $('result').focus(); $('result').select(); });
+$('uppercase').addEventListener('change', renderOutput);
+$('newline').addEventListener('change', renderOutput);
+$('source').addEventListener('input', () => $('inputCount').textContent = `${$('source').value.length} 字元`);
+</script>
+</body>
+</html>
