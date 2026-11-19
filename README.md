@@ -41,26 +41,24 @@
 ### 輸入 SQL
 
 ```sql
-CREATE TABLE T0NGAA22
-(
-    CO            VARCHAR2(2),
-    DIV           VARCHAR2(1),
-    SALID         VARCHAR2(1),
-    CUNO          VARCHAR2(6),
-    EMPNM         VARCHAR2(30),
-    DUT           VARCHAR2(30),
-    TEL           VARCHAR2(20),
-    CLPHN         VARCHAR2(20),
-    FAX           VARCHAR2(20),
-    EMAILBX       VARCHAR2(40),
-    CONSTRAINT PK_T0NGAA22 PRIMARY KEY (CO, DIV, SALID, CUNO)
-);
+CREATE TABLE EMP
+       (EMPNO NUMBER(4) NOT NULL,
+        ENAME VARCHAR2(10),
+        JOB VARCHAR2(9),
+        MGR NUMBER(4),
+        HIREDATE DATE,
+        SAL NUMBER(7,2),
+        COMM NUMBER(7,2),
+        DEPTNO NUMBER(2),
+        CONSTRAINT PK_EMP PRIMARY KEY (EMPNO),  
+        CONSTRAINT FK_DEPTNO FOREIGN KEY (DEPTNO) REFERENCES DEPT (DEPTNO)          
+        );
 ```
 
 ### 輸出結果
 
 ```text
-CO,DIV,SALID,CUNO,EMPNM,DUT,TEL,CLPHN,FAX,EMAILBX
+EMPNO,ENAME,JOB,MGR,HIREDATE,SAL,COMM,DEPTNO
 ```
 
 ## 專案結構
